@@ -10,11 +10,9 @@ class RedisManager:
         self.connection_pools: Dict[str, redis.ConnectionPool] = {}
         self.redis_clients: Dict[str, redis.Redis] = {}
         
-        # Parse Redis nodes from comma-separated string
         redis_nodes = [node.strip() for node in settings.REDIS_NODES.split(",") if node.strip()]
         self.consistent_hash = ConsistentHash(redis_nodes, settings.VIRTUAL_NODES)
         
-        # Initialize connection pools for each Redis node
         for node in redis_nodes:
             self.connection_pools[node] = redis.ConnectionPool.from_url(node)
             self.redis_clients[node] = redis.Redis(connection_pool=self.connection_pools[node])
@@ -29,7 +27,6 @@ class RedisManager:
         Returns:
             Redis client for the appropriate node
         """
-        # Use consistent hashing to determine which node to use
         node = self.consistent_hash.get_node(key)
         
         if node in self.redis_clients:
@@ -49,7 +46,6 @@ class RedisManager:
             New value of the counter
         """
         redis_client, _ = await self.get_connection(key)
-        # Redis operations are blocking, so we run them in a thread pool
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None, lambda: redis_client.incrby(key, amount)
@@ -73,16 +69,11 @@ class RedisManager:
             None, lambda: redis_client.get(key)
         )
         
-        # Extract port from node URL for served_via
         try:
-            # Debug the node URL format
             print(f"Node URL: {node}")
             
-            # For URLs like redis://redis1:7070
             if "redis://" in node:
-                # Extract the host:port part
                 host_port = node.replace("redis://", "").split("/")[0]
-                # Extract just the port
                 port = host_port.split(":")[1]
                 served_via = f"redis_{port}"
             else:
