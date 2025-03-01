@@ -1,4 +1,5 @@
 import redis
+import asyncio
 from typing import Dict, List, Optional, Any
 from .consistent_hash import ConsistentHash
 from .config import settings
@@ -13,10 +14,10 @@ class RedisManager:
         redis_nodes = [node.strip() for node in settings.REDIS_NODES.split(",") if node.strip()]
         self.consistent_hash = ConsistentHash(redis_nodes, settings.VIRTUAL_NODES)
         
-        # TODO: Initialize connection pools for each Redis node
-        # 1. Create connection pools for each Redis node
-        # 2. Initialize Redis clients
-        pass
+        # Initialize connection pools for each Redis node
+        for node in redis_nodes:
+            self.connection_pools[node] = redis.ConnectionPool.from_url(node)
+            self.redis_clients[node] = redis.Redis(connection_pool=self.connection_pools[node])
 
     async def get_connection(self, key: str) -> redis.Redis:
         """
@@ -28,10 +29,10 @@ class RedisManager:
         Returns:
             Redis client for the appropriate node
         """
-        # TODO: Implement getting the appropriate Redis connection
-        # 1. Use consistent hashing to determine which node should handle this key
-        # 2. Return the Redis client for that node
-        pass
+        # For Task 2, we'll use the first Redis node
+        if self.redis_clients:
+            return list(self.redis_clients.values())[0]
+        raise Exception("No Redis connections available")
 
     async def increment(self, key: str, amount: int = 1) -> int:
         """
@@ -44,11 +45,13 @@ class RedisManager:
         Returns:
             New value of the counter
         """
-        # TODO: Implement incrementing a counter
-        # 1. Get the appropriate Redis connection
-        # 2. Increment the counter
-        # 3. Handle potential failures and retries
-        return 0
+        redis_client = await self.get_connection(key)
+        # Redis operations are blocking, so we run them in a thread pool
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, lambda: redis_client.incrby(key, amount)
+        )
+        return result
 
     async def get(self, key: str) -> Optional[int]:
         """
@@ -60,8 +63,17 @@ class RedisManager:
         Returns:
             Value of the key or None if not found
         """
-        # TODO: Implement getting a value
-        # 1. Get the appropriate Redis connection
-        # 2. Retrieve the value
-        # 3. Handle potential failures and retries
-        return None
+        redis_client = await self.get_connection(key)
+        # Redis operations are blocking, so we run them in a thread pool
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, lambda: redis_client.get(key)
+        )
+        
+        if result is None:
+            return 0
+        
+        try:
+            return int(result)
+        except (ValueError, TypeError):
+            return 0

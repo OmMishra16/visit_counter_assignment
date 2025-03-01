@@ -37,3 +37,27 @@ class VisitCounterService:
         """
         # Return 0 if page_id doesn't exist in counters
         return self._visit_counters.get(page_id, 0)
+        
+    async def increment_visit_redis(self, page_id: str) -> None:
+        """
+        Increment visit count for a page in Redis
+        
+        Args:
+            page_id: Unique identifier for the page
+        """
+        key = f"visit_counter:{page_id}"
+        await self.redis_manager.increment(key)
+        
+    async def get_visit_count_redis(self, page_id: str) -> int:
+        """
+        Get current visit count for a page from Redis
+        
+        Args:
+            page_id: Unique identifier for the page
+            
+        Returns:
+            Current visit count
+        """
+        key = f"visit_counter:{page_id}"
+        count = await self.redis_manager.get(key)
+        return count
