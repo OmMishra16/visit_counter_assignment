@@ -29,8 +29,8 @@ async def increment_visit_counter(
     """Increment the visit counter for a specific page."""
     try:
         await counter_service.increment_visit_redis(page_id)
-        count = await counter_service.get_visit_count_redis(page_id)
-        return VisitCount(visits=count, served_via="redis")
+        count, served_via = await counter_service.get_visit_count_redis(page_id)
+        return VisitCount(visits=count, served_via=served_via)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -41,7 +41,7 @@ async def get_visits(
 ):
     """Get visit count for a website"""
     try:
-        count = await counter_service.get_visit_count_redis(page_id)
-        return VisitCount(visits=count, served_via="redis")
+        count, served_via = await counter_service.get_visit_count_redis(page_id)
+        return VisitCount(visits=count, served_via=served_via)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
