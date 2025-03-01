@@ -21,6 +21,20 @@ async def record_visit(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+#
+@router.post("/visits/{page_id}", response_model=VisitCount)
+async def increment_visit_counter(
+    page_id: str,
+    counter_service: VisitCounterService = Depends(get_visit_counter_service)
+):
+    """Increment the visit counter for a specific page."""
+    try:
+        await counter_service.increment_visit(page_id)
+        count = await counter_service.get_visit_count(page_id)
+        return VisitCount(visits=count, served_via="in_memory")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/visits/{page_id}", response_model=VisitCount)
 async def get_visits(
     page_id: str,
@@ -29,6 +43,6 @@ async def get_visits(
     """Get visit count for a website"""
     try:
         count = await counter_service.get_visit_count(page_id)
-        return VisitCount(visits=count, served_via="API")
+        return VisitCount(visits=count, served_via="in_memory")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
