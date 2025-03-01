@@ -120,31 +120,37 @@ class VisitCounterService:
             page_id: Unique identifier for the page
             
         Returns:
-            Tuple of (count, source) where source is 'in_memory' or 'redis'
+            Tuple of (count, source) where source is 'in_memory', 'redis_7070', or 'redis_7071'
         """
         key = f"visit_counter:{page_id}"
         
-  
+        # Get pending count from write buffer
         pending_count = 0
         async with VisitCounterService._lock:
             pending_count = VisitCounterService._write_buffer.get(key, 0)
-  
+            # Remove from buffer if there are pending counts (we'll flush it)
             if pending_count > 0:
                 del VisitCounterService._write_buffer[key]
         
+        # Check if value is in cache and not expired
         if key in self._cache and self._cache[key]['expires_at'] > time.time():
+            # Add any pending writes from the buffer
             total_count = self._cache[key]['value'] + pending_count
             return total_count, 'in_memory'
         
-        count = await self.redis_manager.get(key)
+        # Cache miss or expired, get from Redis
+        count, served_via = await self.redis_manager.get(key)
         
+        # If there were pending counts, flush them to Redis
         if pending_count > 0:
+            # Update Redis with the pending count
             await self.redis_manager.increment(key, pending_count)
             count += pending_count
         
+        # Update cache with new value and expiration time
         self._update_cache(key, count)
         
-        return count, 'redis'
+        return count, served_via
     
     def _update_cache(self, key: str, value: int) -> None:
         """

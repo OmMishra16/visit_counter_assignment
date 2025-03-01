@@ -11,37 +11,57 @@ class ConsistentHash:
             nodes: List of node identifiers (parsed from comma-separated string)
             virtual_nodes: Number of virtual nodes per physical node
         """
+        self.virtual_nodes = virtual_nodes
+        self.ring = {}  # Hash value -> node mapping
+        self.sorted_keys = []  # Sorted list of hash values
+        self.nodes = set()  # Set of actual nodes
         
-        # TODO: Initialize the hash ring with virtual nodes
-        # 1. For each physical node, create virtual_nodes number of virtual nodes
-        # 2. Calculate hash for each virtual node and map it to the physical node
-        # 3. Store the mapping in hash_ring and maintain sorted_keys
-        pass
-
+        # Add nodes to the ring
+        for node in nodes:
+            self.add_node(node)
+    
     def add_node(self, node: str) -> None:
         """
-        Add a new node to the hash ring
+        Add a node to the consistent hash ring
         
         Args:
-            node: Node identifier to add
+            node: Node identifier
         """
-        # TODO: Implement adding a new node
-        # 1. Create virtual nodes for the new physical node
-        # 2. Update hash_ring and sorted_keys
-        pass
-
+        if node in self.nodes:
+            return
+        
+        self.nodes.add(node)
+        
+        # Add virtual nodes
+        for i in range(self.virtual_nodes):
+            key = f"{node}:{i}"
+            hash_value = self._hash(key)
+            self.ring[hash_value] = node
+            self.sorted_keys.append(hash_value)
+        
+        # Sort the keys
+        self.sorted_keys.sort()
+    
     def remove_node(self, node: str) -> None:
         """
-        Remove a node from the hash ring
+        Remove a node from the consistent hash ring
         
         Args:
-            node: Node identifier to remove
+            node: Node identifier
         """
-        # TODO: Implement removing a node
-        # 1. Remove all virtual nodes for the given physical node
-        # 2. Update hash_ring and sorted_keys
-        pass
-
+        if node not in self.nodes:
+            return
+        
+        self.nodes.remove(node)
+        
+        # Remove virtual nodes
+        for i in range(self.virtual_nodes):
+            key = f"{node}:{i}"
+            hash_value = self._hash(key)
+            if hash_value in self.ring:
+                del self.ring[hash_value]
+                self.sorted_keys.remove(hash_value)
+    
     def get_node(self, key: str) -> str:
         """
         Get the node responsible for the given key
@@ -52,9 +72,32 @@ class ConsistentHash:
         Returns:
             The node responsible for the key
         """
-        # TODO: Implement node lookup
-        # 1. Calculate hash of the key
-        # 2. Find the first node in the ring that comes after the key's hash
-        # 3. If no such node exists, wrap around to the first node
-        return ""
+        if not self.ring:
+            raise Exception("Hash ring is empty")
+        
+        # Calculate hash of the key
+        hash_value = self._hash(key)
+        
+        # Find the first node in the ring that comes after the key's hash
+        idx = bisect(self.sorted_keys, hash_value)
+        
+        # If no such node exists, wrap around to the first node
+        if idx >= len(self.sorted_keys):
+            idx = 0
+        
+        return self.ring[self.sorted_keys[idx]]
+    
+    def _hash(self, key: str) -> int:
+        """
+        Hash a key to an integer value
+        
+        Args:
+            key: The key to hash
+            
+        Returns:
+            Integer hash value
+        """
+        # Use MD5 for consistent hashing
+        hash_obj = hashlib.md5(key.encode('utf-8'))
+        return int(hash_obj.hexdigest(), 16)
     

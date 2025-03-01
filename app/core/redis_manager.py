@@ -29,10 +29,13 @@ class RedisManager:
         Returns:
             Redis client for the appropriate node
         """
-        # For Task 2, we'll use the first Redis node
-        if self.redis_clients:
-            return list(self.redis_clients.values())[0]
-        raise Exception("No Redis connections available")
+        # Use consistent hashing to determine which node to use
+        node = self.consistent_hash.get_node(key)
+        
+        if node in self.redis_clients:
+            return self.redis_clients[node], node
+        
+        raise Exception(f"No Redis connection available for node {node}")
 
     async def increment(self, key: str, amount: int = 1) -> int:
         """
@@ -45,7 +48,7 @@ class RedisManager:
         Returns:
             New value of the counter
         """
-        redis_client = await self.get_connection(key)
+        redis_client, _ = await self.get_connection(key)
         # Redis operations are blocking, so we run them in a thread pool
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -53,7 +56,7 @@ class RedisManager:
         )
         return result
 
-    async def get(self, key: str) -> Optional[int]:
+    async def get(self, key: str) -> (Optional[int], str):
         """
         Get value for a key from Redis
         
@@ -61,19 +64,37 @@ class RedisManager:
             key: The key to get
             
         Returns:
-            Value of the key or None if not found
+            Tuple of (value, node) where value is the key's value and node is the Redis node
         """
-        redis_client = await self.get_connection(key)
+        redis_client, node = await self.get_connection(key)
         # Redis operations are blocking, so we run them in a thread pool
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None, lambda: redis_client.get(key)
         )
         
+        # Extract port from node URL for served_via
+        try:
+            # Debug the node URL format
+            print(f"Node URL: {node}")
+            
+            # For URLs like redis://redis1:7070
+            if "redis://" in node:
+                # Extract the host:port part
+                host_port = node.replace("redis://", "").split("/")[0]
+                # Extract just the port
+                port = host_port.split(":")[1]
+                served_via = f"redis_{port}"
+            else:
+                served_via = "redis"
+        except (IndexError, ValueError) as e:
+            print(f"Error extracting port: {e}, node: {node}")
+            served_via = "redis"
+        
         if result is None:
-            return 0
+            return 0, served_via
         
         try:
-            return int(result)
-        except (ValueError, TypeError):
-            return 0
+            return int(result), served_via
+        except (TypeError, ValueError):
+            return 0, served_via
